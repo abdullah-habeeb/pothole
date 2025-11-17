@@ -1,18 +1,46 @@
 import { useQuery } from '@tanstack/react-query';
-import { MapContainer, TileLayer, useMapEvents } from 'react-leaflet';
-import { potholeApi } from '../services/potholeApi';
+import { MapContainer, TileLayer, useMapEvents, useMap } from 'react-leaflet';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { potholeApi, Pothole } from '../services/potholeApi';
 import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import 'leaflet/dist/leaflet.css';
 import { ensureArray, isValidPotholeForMap } from '../utils/potholeUtils';
 import { generateUserPotholes } from '../utils/userDataGenerator';
 import { PotholeMarker } from '../components/PotholeMarker';
+import { toast } from 'sonner';
+import {
+  usePotholeSelection,
+  SelectedPothole,
+} from '../context/PotholeSelectionContext';
 
 // Toggle for fake data - set to true to use test data
 const USE_FAKE_DATA = true;
 
 // Default center: Bangalore, India
 const DEFAULT_CENTER: [number, number] = [12.9716, 77.5946];
+
+type SelectionNavState = {
+  selectionMode?: boolean;
+  preselect?: number[];
+  focus?: { lat: number; lng: number; zoom?: number };
+} | null;
+
+const getSegmentLabel = (p: Pick<Pothole, 'latitude' | 'longitude'>) => {
+  const zones = ['North BLR', 'South BLR', 'East BLR', 'West BLR'];
+  const zoneIndex = Math.abs(Math.round(p.longitude * 10)) % zones.length;
+  const sector = Math.abs(Math.round(p.latitude * 100)) % 50;
+  return `${zones[zoneIndex]} • Sector ${sector}`;
+};
+
+const buildSelectionSummary = (items: SelectedPothole[]) => {
+  if (items.length === 0) return '';
+  if (items.length === 1) {
+    return items[0].segmentLabel || items[0].description || `Pothole #${items[0].id}`;
+  }
+  const anchor = items[0];
+  return `${items.length} potholes near ${anchor.segmentLabel || anchor.description || 'selected area'}`;
+};
 
 // Component to track map center and zoom
 const MapLocationTracker = ({ onLocationChange }: { onLocationChange: (lat: number, lng: number, zoom: number) => void }) => {
@@ -38,11 +66,28 @@ const MapLocationTracker = ({ onLocationChange }: { onLocationChange: (lat: numb
   return null;
 };
 
+const SelectionFocusController = ({ focus }: { focus: { lat: number; lng: number } | null }) => {
+  const map = useMap();
+  useEffect(() => {
+    if (focus) {
+      map.flyTo([focus.lat, focus.lng], Math.max(map.getZoom(), 14), { duration: 0.6 });
+    }
+  }, [focus, map]);
+  return null;
+};
+
 const MapView = () => {
   const { user } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { setSelection } = usePotholeSelection();
   const [mapType, setMapType] = useState<'osm' | 'satellite'>('osm');
   const [showMajorRoads, setShowMajorRoads] = useState(false);
   const [mapLocation, setMapLocation] = useState({ lat: DEFAULT_CENTER[0], lng: DEFAULT_CENTER[1], zoom: 13 });
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedMap, setSelectedMap] = useState<Record<number, SelectedPothole>>({});
+  const [pendingPreselect, setPendingPreselect] = useState<number[]>([]);
+  const [focusPoint, setFocusPoint] = useState<{ lat: number; lng: number } | null>(null);
 
   const { data: apiPotholes, isLoading, error } = useQuery({
     queryKey: ['potholes'],
@@ -94,6 +139,102 @@ const MapView = () => {
       opacity={0.5}
     />
   ) : null;
+
+  const selectionNavState = location.state as SelectionNavState;
+
+  useEffect(() => {
+    if (selectionNavState?.selectionMode) {
+      setSelectionMode(true);
+      if (selectionNavState.preselect?.length) {
+        setPendingPreselect(selectionNavState.preselect);
+      }
+      if (selectionNavState.focus) {
+        setFocusPoint({
+          lat: selectionNavState.focus.lat,
+          lng: selectionNavState.focus.lng,
+        });
+      }
+      navigate(location.pathname, { replace: true, state: null });
+    }
+  }, [selectionNavState, navigate, location.pathname]);
+
+  useEffect(() => {
+    if (!selectionMode || pendingPreselect.length === 0) return;
+    setSelectedMap((prev) => {
+      const next = { ...prev };
+      pendingPreselect.forEach((id) => {
+        const match = validPotholes.find((p) => p.id === id);
+        if (match) {
+          next[match.id] = {
+            ...match,
+            segmentLabel: getSegmentLabel(match),
+            description: `Lat ${match.latitude.toFixed(3)}, Lng ${match.longitude.toFixed(3)}`,
+          };
+        }
+      });
+      return next;
+    });
+    setPendingPreselect([]);
+  }, [selectionMode, pendingPreselect, validPotholes]);
+
+  const selectedList = useMemo(() => Object.values(selectedMap), [selectedMap]);
+  const selectedCount = selectedList.length;
+
+  const toggleSelection = (pothole: Pothole) => {
+    setSelectedMap((prev) => {
+      const draft = { ...prev };
+      if (draft[pothole.id]) {
+        delete draft[pothole.id];
+      } else {
+        draft[pothole.id] = {
+          id: pothole.id,
+          latitude: pothole.latitude,
+          longitude: pothole.longitude,
+          severity: pothole.severity,
+          status: pothole.status,
+          depth_estimation: pothole.depth_estimation,
+          segmentLabel: getSegmentLabel(pothole),
+          description: `Lat ${pothole.latitude.toFixed(3)}, Lng ${pothole.longitude.toFixed(3)}`,
+        };
+      }
+      return draft;
+    });
+  };
+
+  const removeSelection = (id: number) => {
+    setSelectedMap((prev) => {
+      const draft = { ...prev };
+      delete draft[id];
+      return draft;
+    });
+  };
+
+  const exitSelectionMode = () => {
+    setSelectionMode(false);
+    setSelectedMap({});
+    setPendingPreselect([]);
+    setFocusPoint(null);
+  };
+
+  const handleConfirmSelection = () => {
+    if (selectedCount === 0) {
+      toast.error('Select at least one pothole to continue');
+      return;
+    }
+    setSelection({
+      items: selectedList,
+      summary: buildSelectionSummary(selectedList),
+      source: 'map',
+    });
+    toast.success(`Selected ${selectedCount} pothole${selectedCount > 1 ? 's' : ''}`);
+    exitSelectionMode();
+    navigate('/dashboard', { state: { focus: 'gov-panel' } });
+  };
+
+  const handleCancelSelection = () => {
+    exitSelectionMode();
+    toast('Selection mode cancelled');
+  };
 
   return (
     <div className="space-y-4">
@@ -159,6 +300,12 @@ const MapView = () => {
             <div className="w-4 h-4 rounded-full bg-green-500"></div>
             <span>Low Severity</span>
           </div>
+          {selectionMode && (
+            <div className="flex items-center gap-2 text-primary-700 font-semibold">
+              <span className="h-2 w-2 rounded-full bg-primary-500 animate-pulse" />
+              Selection mode active · click markers to toggle
+            </div>
+          )}
         </div>
       </div>
 
@@ -170,6 +317,32 @@ const MapView = () => {
           </div>
         ) : (
           <div className="relative h-full w-full">
+            {selectionMode && (
+              <div className="absolute top-4 left-1/2 z-[1200] -translate-x-1/2">
+                <div className="flex items-center gap-4 rounded-full border border-primary-100 bg-white/95 px-5 py-3 shadow-card">
+                  <span className="text-sm font-semibold text-primary-700">
+                    Selection mode · {selectedCount} selected
+                  </span>
+                  <div className="flex items-center gap-2 text-xs font-medium">
+                    <button
+                      type="button"
+                      onClick={handleCancelSelection}
+                      className="rounded-full border border-surface-200 px-3 py-1 text-ink-500 hover:border-ink-400"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={selectedCount === 0}
+                      onClick={handleConfirmSelection}
+                      className="rounded-full bg-primary-600 px-3 py-1 text-white disabled:opacity-50"
+                    >
+                      Confirm
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
             <MapContainer
               center={center}
               zoom={13}
@@ -181,10 +354,17 @@ const MapView = () => {
 
               {/* Track map location */}
               <MapLocationTracker onLocationChange={(lat, lng, zoom) => setMapLocation({ lat, lng, zoom })} />
+              <SelectionFocusController focus={focusPoint} />
 
               {/* Safe marker rendering - only valid potholes are rendered */}
               {validPotholes.map((pothole) => (
-                <PotholeMarker key={pothole.id} pothole={pothole} />
+                <PotholeMarker
+                  key={pothole.id}
+                  pothole={pothole}
+                  selectionMode={selectionMode}
+                  isSelected={Boolean(selectedMap[pothole.id])}
+                  onToggleSelect={toggleSelection}
+                />
               ))}
             </MapContainer>
 
@@ -200,6 +380,30 @@ const MapView = () => {
                 <div>Zoom: {mapLocation.zoom}</div>
               </div>
             </div>
+
+            {selectionMode && selectedCount > 0 && (
+              <div className="absolute bottom-4 left-4 z-[1100] w-64 rounded-xl border border-surface-200 bg-white/95 p-3 shadow-card">
+                <p className="text-xs font-semibold uppercase tracking-wide text-ink-400">
+                  Selected Potholes
+                </p>
+                <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto text-xs text-ink-600">
+                  {selectedList.map((item) => (
+                    <li key={item.id} className="flex items-center justify-between gap-2">
+                      <span className="line-clamp-2">
+                        #{item.id} • {item.segmentLabel || item.description}
+                      </span>
+                      <button
+                        type="button"
+                        className="text-primary-600"
+                        onClick={() => removeSelection(item.id)}
+                      >
+                        ✕
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
 
             {/* Empty state overlay - only show if no valid potholes */}
             {validPotholes.length === 0 && (

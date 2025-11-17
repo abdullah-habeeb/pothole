@@ -3,6 +3,7 @@ import { Toaster } from 'sonner';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { AuthProvider } from './context/AuthContext';
 import { GovernmentProvider } from './context/GovernmentContext';
+import { PotholeSelectionProvider } from './context/PotholeSelectionContext';
 import AppRouter from './router/AppRouter';
 
 const queryClient = new QueryClient({
@@ -21,8 +22,10 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <AuthProvider>
           <GovernmentProvider>
-            <AppRouter />
-            <Toaster position="top-right" richColors />
+            <PotholeSelectionProvider>
+              <AppRouter />
+              <Toaster position="top-right" richColors />
+            </PotholeSelectionProvider>
           </GovernmentProvider>
         </AuthProvider>
       </QueryClientProvider>

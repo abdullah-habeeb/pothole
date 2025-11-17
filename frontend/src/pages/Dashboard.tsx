@@ -1,9 +1,7 @@
-import { useAuth } from "../context/AuthContext";
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { potholeApi, Severity, Status, Pothole } from '../services/potholeApi';
-import { toast } from 'sonner';
+import { potholeApi, Severity, Status } from '../services/potholeApi';
 import {
   BarChart,
   Bar,
@@ -19,6 +17,7 @@ import {
 } from 'recharts';
 import { CardSkeleton } from '../components/LoadingSkeleton';
 import { FAKE_STATS } from '../utils/potholeUtils';
+import GovernmentManagementPanel from '../components/GovernmentManagementPanel';
 
 // Toggle for fake data - set to true to use test data
 const USE_FAKE_DATA = true;
@@ -33,14 +32,10 @@ const COLORS = {
 };
 
 const Dashboard = () => {
-  const { user } = useAuth();
-  const isAuthorized = user?.isGovernmentAuthorized || false;
   const [severityFilter, setSeverityFilter] = useState<Severity | 'all'>('all');
   const [statusFilter, setStatusFilter] = useState<Status | 'all'>('all');
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
-  const [selectedPothole, setSelectedPothole] = useState<Pothole | null>(null);
-  const [contractorName, setContractorName] = useState<string>('');
 
   const { data: apiStats, isLoading, error } = useQuery({
     queryKey: ['potholeStats', severityFilter, statusFilter, startDate, endDate],
@@ -90,43 +85,6 @@ const Dashboard = () => {
         { name: 'High', count: stats.severity_count.high },
       ]
     : [];
-
-  const handleStatusChange = async (potholeId: number, newStatus: Status) => {
-    if (!isAuthorized) {
-      toast.error('Government authorization required');
-      return;
-    }
-    try {
-      await potholeApi.updatePothole(potholeId, { status: newStatus });
-      toast.success('Pothole status updated');
-      // In a real app, you'd refetch the data here
-    } catch (error) {
-      toast.error('Failed to update status');
-    }
-  };
-
-  const handleAssignContractor = async (potholeId: number) => {
-    if (!isAuthorized) {
-      toast.error('Government authorization required');
-      return;
-    }
-    if (!contractorName.trim()) {
-      toast.error('Please enter contractor name');
-      return;
-    }
-    try {
-      await potholeApi.updatePothole(potholeId, { 
-        assigned_contractor: contractorName,
-        status: 'in_progress'
-      });
-      toast.success('Contractor assigned successfully');
-      setContractorName('');
-      setSelectedPothole(null);
-      // In a real app, you'd refetch the data here
-    } catch (error) {
-      toast.error('Failed to assign contractor');
-    }
-  };
 
   return (
     <div className="space-y-6">
@@ -409,80 +367,7 @@ const Dashboard = () => {
             )}
           </div>
 
-          {/* Government Management Panel */}
-          {isAuthorized && (
-            <div className="bg-white shadow rounded-lg p-6 border-2 border-blue-200">
-              <div className="flex items-center gap-2 mb-4">
-                <span className="text-2xl">🏛️</span>
-                <h3 className="text-lg font-semibold text-gray-900">
-                  Government Management Panel
-                </h3>
-              </div>
-              
-              <div className="space-y-4">
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <h4 className="font-medium text-gray-900 mb-2">Assign Contractor</h4>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={contractorName}
-                      onChange={(e) => setContractorName(e.target.value)}
-                      placeholder="Enter contractor name"
-                      className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm px-3 py-2 border"
-                    />
-                    <button
-                      onClick={() => selectedPothole && handleAssignContractor(selectedPothole.id)}
-                      disabled={!selectedPothole || !contractorName.trim()}
-                      className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Assign
-                    </button>
-                  </div>
-                  {selectedPothole && (
-                    <p className="mt-2 text-xs text-gray-600">
-                      Selected: Pothole #{selectedPothole.id} at ({selectedPothole.latitude.toFixed(4)}, {selectedPothole.longitude.toFixed(4)})
-                    </p>
-                  )}
-                </div>
-
-                <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                  <h4 className="font-medium text-gray-900 mb-2">Change Pothole Status</h4>
-                  <div className="flex gap-2 flex-wrap">
-                    <button
-                      onClick={() => selectedPothole && handleStatusChange(selectedPothole.id, 'open')}
-                      disabled={!selectedPothole}
-                      className="px-3 py-1 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Set Open
-                    </button>
-                    <button
-                      onClick={() => selectedPothole && handleStatusChange(selectedPothole.id, 'in_progress')}
-                      disabled={!selectedPothole}
-                      className="px-3 py-1 text-sm font-medium text-white bg-yellow-600 rounded-md hover:bg-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Set In Progress
-                    </button>
-                    <button
-                      onClick={() => selectedPothole && handleStatusChange(selectedPothole.id, 'fixed')}
-                      disabled={!selectedPothole}
-                      className="px-3 py-1 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      Set Fixed
-                    </button>
-                  </div>
-                  <p className="mt-2 text-xs text-gray-600">
-                    {selectedPothole 
-                      ? `Current status: ${selectedPothole.status}` 
-                      : 'Select a pothole from the map to change its status'}
-                  </p>
-                </div>
-
-                <div className="text-xs text-gray-500 bg-gray-50 p-3 rounded">
-                  <strong>Note:</strong> This is a prototype. In production, you would select potholes from a list or map interface.
-                </div>
-              </div>
-            </div>
-          )}
+          <GovernmentManagementPanel />
         </>
       )}
     </div>

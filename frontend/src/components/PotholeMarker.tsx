@@ -5,37 +5,55 @@ import { isValidPotholeForMap } from '../utils/potholeUtils';
 
 interface PotholeMarkerProps {
   pothole: unknown;
+  selectionMode?: boolean;
+  isSelected?: boolean;
+  onToggleSelect?: (pothole: Pothole) => void;
 }
 
-// Create custom icons
-const createCustomIcon = (color: string) => {
+const createCustomIcon = (color: string, selected = false) => {
+  const ringColor = selected ? '#0ea5e9' : 'white';
+  const size = selected ? 24 : 20;
   return new DivIcon({
     className: 'custom-marker',
-    html: `<div style="background-color: ${color}; width: 20px; height: 20px; border-radius: 50%; border: 2px solid white; box-shadow: 0 2px 4px rgba(0,0,0,0.3);"></div>`,
-    iconSize: [20, 20],
-    iconAnchor: [10, 10],
+    html: `<div style="
+      background-color: ${color};
+      width: ${size}px;
+      height: ${size}px;
+      border-radius: 50%;
+      border: 3px solid ${ringColor};
+      box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+    "></div>`,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
   });
 };
 
-const redIcon = createCustomIcon('#ef4444');
-const orangeIcon = createCustomIcon('#f97316');
-const greenIcon = createCustomIcon('#22c55e');
-
-const getMarkerIcon = (severity: Pothole['severity']) => {
-  switch (severity) {
-    case 'high':
-      return redIcon;
-    case 'medium':
-      return orangeIcon;
-    case 'low':
-      return greenIcon;
-    default:
-      return greenIcon;
-  }
+const iconCache = {
+  high: {
+    default: createCustomIcon('#ef4444'),
+    selected: createCustomIcon('#ef4444', true),
+  },
+  medium: {
+    default: createCustomIcon('#f97316'),
+    selected: createCustomIcon('#f97316', true),
+  },
+  low: {
+    default: createCustomIcon('#22c55e'),
+    selected: createCustomIcon('#22c55e', true),
+  },
 };
 
-export const PotholeMarker = ({ pothole }: PotholeMarkerProps) => {
-  // Safe validation - ensure pothole has all required fields
+const getMarkerIcon = (severity: Pothole['severity'], selected = false) => {
+  const bucket = iconCache[severity] || iconCache.low;
+  return selected ? bucket.selected : bucket.default;
+};
+
+export const PotholeMarker = ({
+  pothole,
+  selectionMode = false,
+  isSelected = false,
+  onToggleSelect,
+}: PotholeMarkerProps) => {
   if (!isValidPotholeForMap(pothole)) {
     return null;
   }
@@ -45,7 +63,14 @@ export const PotholeMarker = ({ pothole }: PotholeMarkerProps) => {
   return (
     <Marker
       position={[p.latitude, p.longitude]}
-      icon={getMarkerIcon(p.severity)}
+      icon={getMarkerIcon(p.severity, isSelected)}
+      eventHandlers={
+        selectionMode
+          ? {
+              click: () => onToggleSelect?.(p),
+            }
+          : undefined
+      }
     >
       <Popup>
         <div className="p-2 min-w-[200px]">
@@ -55,7 +80,6 @@ export const PotholeMarker = ({ pothole }: PotholeMarkerProps) => {
               alt={`Pothole ${p.id}`}
               className="w-full h-32 object-cover rounded mb-2"
               onError={(e) => {
-                // Hide image if it fails to load
                 e.currentTarget.style.display = 'none';
               }}
             />
@@ -68,9 +92,7 @@ export const PotholeMarker = ({ pothole }: PotholeMarkerProps) => {
             </p>
             <p>
               <strong>Status:</strong>{' '}
-              <span className="capitalize">
-                {(p.status || 'unknown').replace('_', ' ')}
-              </span>
+              <span className="capitalize">{(p.status || 'unknown').replace('_', ' ')}</span>
             </p>
             {p.depth_estimation && typeof p.depth_estimation === 'number' && (
               <p>
@@ -84,6 +106,15 @@ export const PotholeMarker = ({ pothole }: PotholeMarkerProps) => {
               {p.latitude.toFixed(6)}, {p.longitude.toFixed(6)}
             </p>
           </div>
+          {selectionMode && (
+            <button
+              type="button"
+              onClick={() => onToggleSelect?.(p)}
+              className="mt-3 w-full rounded-md border border-primary-200 bg-primary-50 py-1.5 text-xs font-semibold text-primary-700"
+            >
+              {isSelected ? 'Remove from selection' : 'Select for assignment'}
+            </button>
+          )}
         </div>
       </Popup>
     </Marker>

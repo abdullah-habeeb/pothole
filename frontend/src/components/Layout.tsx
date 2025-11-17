@@ -11,6 +11,7 @@ const Layout = () => {
   const { user, logout, refreshUser } = useAuth();
   const [showGovtModal, setShowGovtModal] = useState(false);
   const [showAdminModal, setShowAdminModal] = useState(false);
+  const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
 
   const handleLogout = async () => {
     try {
@@ -24,86 +25,152 @@ const Layout = () => {
 
   const navItems = [
     { path: '/dashboard', label: 'Dashboard', icon: '📊' },
-    { path: '/upload', label: 'Upload Video', icon: '📤' },
-    { path: '/map', label: 'Map View', icon: '🗺️' },
-    { path: '/admin', label: 'Admin Panel', icon: '⚙️' },
+    { path: '/upload', label: 'Upload', icon: '📤' },
+    { path: '/map', label: 'Map', icon: '🗺️' },
+    { path: '/admin', label: 'Admin', icon: '⚙️' },
   ];
 
   const isActive = (path: string) => location.pathname === path;
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="bg-white shadow-sm border-b border-gray-200">
+    <div className="app-shell">
+      <div className="bg-white/90 backdrop-blur border-b border-surface-200 shadow-subtle sticky top-0 z-30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between h-16">
-            <div className="flex">
-              <div className="flex-shrink-0 flex items-center">
-                <Link to="/dashboard" className="text-2xl font-bold text-primary-600">
-                  🕳️ Pothole Detection
-                </Link>
-              </div>
-              <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
+          <div className="flex h-16 items-center justify-between">
+            <div className="flex items-center gap-4">
+              <button
+                type="button"
+                className="sm:hidden p-2 rounded-lg border border-surface-200 text-ink-500 hover:text-primary-600 hover:border-primary-200 transition-colors"
+                onClick={() => setIsMobileNavOpen((prev) => !prev)}
+                aria-label="Toggle navigation"
+              >
+                <span className="block w-5 border-t-2 border-current mb-1" />
+                <span className="block w-4 border-t-2 border-current" />
+              </button>
+              <Link to="/dashboard" className="flex items-center gap-2 text-xl font-semibold text-primary-700">
+                <span className="text-2xl">🕳️</span>
+                <span>Pothole Detection</span>
+              </Link>
+              <div className="hidden sm:flex items-center gap-1 ml-6">
                 {navItems.map((item) => (
                   <Link
                     key={item.path}
                     to={item.path}
-                    className={`inline-flex items-center px-1 pt-1 border-b-2 text-sm font-medium transition-colors ${
+                    className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                       isActive(item.path)
-                        ? 'border-primary-500 text-gray-900'
-                        : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                        ? 'bg-primary-50 text-primary-700'
+                        : 'text-ink-500 hover:text-primary-600 hover:bg-surface-100'
                     }`}
                   >
-                    <span className="mr-2">{item.icon}</span>
+                    <span>{item.icon}</span>
                     {item.label}
                   </Link>
                 ))}
               </div>
             </div>
-            <div className="flex items-center space-x-4">
-              {user?.isAdmin && (
-                <div className="px-3 py-1 bg-purple-100 text-purple-800 rounded-md text-xs font-medium">
-                  🔐 Admin
-                </div>
-              )}
-              {user?.isGovernmentAuthorized ? (
-                <div className="px-3 py-1 bg-green-100 text-green-800 rounded-md text-xs font-medium">
-                  🏛️ Government Authorized
-                </div>
-              ) : (
-                <div className="px-3 py-1 bg-gray-100 text-gray-600 rounded-md text-xs font-medium">
-                  🏛️ Government Unauthorized
-                </div>
-              )}
-              <button
-                onClick={() => setShowGovtModal(true)}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700 transition-colors"
-              >
-                {user?.isGovernmentAuthorized ? 'Government Panel' : 'Government Authorization'}
-              </button>
-              {!user?.isAdmin && (
-                <button
-                  onClick={() => setShowAdminModal(true)}
-                  className="px-4 py-2 text-sm font-medium text-white bg-purple-600 border border-transparent rounded-md hover:bg-purple-700 transition-colors"
+
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2">
+                {user?.isAdmin && (
+                  <span className="metric-chip bg-purple-50 text-purple-700 border border-purple-100">
+                    🔐 Admin
+                  </span>
+                )}
+                <span
+                  className={`metric-chip border ${
+                    user?.isGovernmentAuthorized
+                      ? 'bg-green-50 text-green-700 border-green-100'
+                      : 'bg-surface-100 text-ink-500 border-surface-200'
+                  }`}
                 >
-                  Admin Authorization
+                  🏛️ {user?.isGovernmentAuthorized ? 'Government Authorized' : 'Government Pending'}
+                </span>
+              </div>
+
+              <div className="hidden md:flex items-center gap-2">
+                <button
+                  onClick={() => setShowGovtModal(true)}
+                  className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
+                >
+                  {user?.isGovernmentAuthorized ? 'Gov Panel' : 'Gov Authorization'}
                 </button>
-              )}
-              <span className="text-sm text-gray-700">
-                {user?.name || user?.email}
-              </span>
-              <button
-                onClick={handleLogout}
-                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 transition-colors"
-              >
-                Logout
-              </button>
+                {!user?.isAdmin && (
+                  <button
+                    onClick={() => setShowAdminModal(true)}
+                    className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 transition-colors"
+                  >
+                    Admin Authorization
+                  </button>
+                )}
+              </div>
+
+              <div className="flex items-center gap-3 pl-3 border-l border-surface-200">
+                <div className="text-right">
+                  <p className="text-sm font-medium text-ink-700 leading-tight">
+                    {user?.name || 'User'}
+                  </p>
+                  <p className="text-xs text-ink-400">{user?.email}</p>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="px-3 py-2 text-sm font-medium text-ink-500 border border-surface-200 rounded-lg hover:text-primary-600 hover:border-primary-200 transition-colors"
+                >
+                  Logout
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      </nav>
 
-      <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-        <Outlet />
+          {/* Mobile nav */}
+          {isMobileNavOpen && (
+            <div className="sm:hidden pb-4 border-t border-surface-200">
+              <nav className="flex flex-col gap-1 pt-4">
+                {navItems.map((item) => (
+                  <Link
+                    key={item.path}
+                    to={item.path}
+                    onClick={() => setIsMobileNavOpen(false)}
+                    className={`flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium ${
+                      isActive(item.path)
+                        ? 'bg-primary-50 text-primary-700'
+                        : 'text-ink-500 hover:bg-surface-100'
+                    }`}
+                  >
+                    <span className="text-lg">{item.icon}</span>
+                    <span>{item.label}</span>
+                  </Link>
+                ))}
+                <button
+                  onClick={() => {
+                    setIsMobileNavOpen(false);
+                    setShowGovtModal(true);
+                  }}
+                  className="w-full mt-2 px-3 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium"
+                >
+                  {user?.isGovernmentAuthorized ? 'Gov Panel' : 'Gov Authorization'}
+                </button>
+                {!user?.isAdmin && (
+                  <button
+                    onClick={() => {
+                      setIsMobileNavOpen(false);
+                      setShowAdminModal(true);
+                    }}
+                    className="w-full mt-2 px-3 py-2 rounded-lg bg-purple-600 text-white text-sm font-medium"
+                  >
+                    Admin Authorization
+                  </button>
+                )}
+              </nav>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <main className="relative">
+        <div className="absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-primary-50/80 to-transparent pointer-events-none" />
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 relative">
+          <Outlet />
+        </div>
       </main>
 
       <GovernmentAuthModal

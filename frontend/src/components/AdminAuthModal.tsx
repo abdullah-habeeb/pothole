@@ -36,68 +36,60 @@ const AdminAuthModal = ({ isOpen, onClose, onSuccess }: AdminAuthModalProps) => 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto">
-      <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20 text-center sm:block sm:p-0">
-        {/* Background overlay */}
-        <div
-          className="fixed inset-0 transition-opacity bg-gray-500 bg-opacity-75"
-          onClick={onClose}
-        ></div>
-
-        {/* Modal panel */}
-        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-          <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-            <div className="sm:flex sm:items-start">
-              <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-purple-100 sm:mx-0 sm:h-10 sm:w-10">
-                <span className="text-2xl">🔐</span>
-              </div>
-              <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left w-full">
-                <h3 className="text-lg leading-6 font-medium text-gray-900">
-                  Admin Authorization
-                </h3>
-                <div className="mt-2">
-                  <p className="text-sm text-gray-500">
-                    Enter admin passkey to access administrative features.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-              <div>
-                <label htmlFor="admin-passkey" className="block text-sm font-medium text-gray-700">
-                  Admin Passkey
-                </label>
-                <input
-                  id="admin-passkey"
-                  type="password"
-                  required
-                  value={passkey}
-                  onChange={(e) => setPasskey(e.target.value)}
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-primary-500 focus:ring-primary-500 sm:text-sm px-3 py-2 border"
-                  placeholder="Enter admin passkey"
-                />
-              </div>
-
-              <div className="flex justify-end space-x-3 pt-4">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="px-4 py-2 text-sm font-medium text-white bg-primary-600 border border-transparent rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  {loading ? 'Verifying...' : 'Authorize'}
-                </button>
-              </div>
-            </form>
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+      <div
+        className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"
+        onClick={onClose}
+      />
+      <div className="relative w-full max-w-md card shadow-card p-6 sm:p-8 space-y-6 animate-in fade-in zoom-in duration-200">
+        <div className="flex items-start gap-4">
+          <div className="h-12 w-12 rounded-2xl bg-purple-50 text-purple-700 flex items-center justify-center text-2xl">
+            🔐
+          </div>
+          <div className="flex-1">
+            <h2 className="text-xl font-semibold text-ink-700">Admin Authorization</h2>
+            <p className="text-sm text-ink-400 mt-1">
+              Secure the console by confirming the admin passkey.
+            </p>
           </div>
         </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1">
+            <label htmlFor="admin-passkey" className="text-sm font-medium text-ink-500">
+              Admin Passkey
+            </label>
+            <input
+              id="admin-passkey"
+              type="password"
+              required
+              value={passkey}
+              onChange={(e) => setPasskey(e.target.value)}
+              className="w-full rounded-lg border border-surface-200 bg-white px-3 py-2.5 text-sm focus:border-purple-500 focus:ring-2 focus:ring-purple-100 transition-shadow"
+              placeholder="Enter admin passkey"
+            />
+            <p className="text-xs text-ink-400">
+              Contact the platform owner if you do not have a passkey.
+            </p>
+          </div>
+
+          <div className="flex flex-col sm:flex-row justify-end gap-3 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-sm font-medium text-ink-500 border border-surface-200 rounded-lg hover:border-ink-400 transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="px-4 py-2 text-sm font-semibold text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
+            >
+              {loading ? 'Verifying…' : 'Authorize access'}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

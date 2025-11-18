@@ -315,7 +315,7 @@ const GovernmentManagementPanel = () => {
         </div>
         <button
           type="button"
-          onClick={() => handleSelectPotholes()}
+          onClick={() => navigate('/map?assignMode=true')}
           disabled={!isAuthorized}
           title={
             isAuthorized ? 'Select potholes on the map' : 'Government authorization required'
@@ -327,7 +327,7 @@ const GovernmentManagementPanel = () => {
               : 'bg-surface-200 text-ink-400 cursor-not-allowed'
           )}
         >
-          Select potholes
+          Select Potholes
         </button>
         </div>
 

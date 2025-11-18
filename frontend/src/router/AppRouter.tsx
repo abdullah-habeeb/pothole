@@ -6,6 +6,8 @@ import UploadVideo from '../pages/UploadVideo';
 import MapView from '../pages/MapView';
 import Dashboard from '../pages/Dashboard';
 import Admin from '../pages/Admin';
+import AdminPanel from '../pages/AdminPanel';
+import Assignments from '../pages/Assignments';
 import Layout from '../components/Layout';
 
 const AppRouter = () => {
@@ -30,6 +32,8 @@ const AppRouter = () => {
           <Route path="map" element={<MapView />} />
           <Route path="dashboard" element={<Dashboard />} />
           <Route path="admin" element={<Admin />} />
+          <Route path="admin-panel" element={<AdminPanel />} />
+          <Route path="assignments" element={<Assignments />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

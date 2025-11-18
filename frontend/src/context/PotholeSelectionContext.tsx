@@ -13,6 +13,7 @@ export interface SelectionState {
   items: SelectedPothole[];
   summary?: string;
   source?: 'map' | 'list';
+  contractorName?: string;
 }
 
 interface SelectionContextValue {

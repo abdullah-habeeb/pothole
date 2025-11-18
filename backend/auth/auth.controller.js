@@ -269,51 +269,60 @@ export const adminAuthorize = async (req, res) => {
 };
 
 // @route   POST /api/auth/government-authorize
-// @desc    Authorize user for government access using username and password
+// @desc    Create a government authorization request (new flow)
 // @access  Private
 export const governmentAuthorize = async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const { email, password } = req.body;
 
-    if (!username || !password) {
+    if (!email || !password) {
       return res.status(400).json({
         success: false,
-        message: 'Username and password are required'
+        message: 'Email and password are required'
       });
     }
 
-    // Hardcoded government credentials for prototype
-    const GOVT_EMAIL = 'govt@admin.com';
-    const GOVT_PASSWORD = 'admin123';
+    // Import here to avoid circular dependency
+    const GovAuthorizationRequest = (await import('../models/GovAuthorizationRequest.js')).default;
 
-    if (username.trim() !== GOVT_EMAIL || password !== GOVT_PASSWORD) {
-      return res.status(401).json({
+    // Check if user already has a pending request
+    const existingRequest = await GovAuthorizationRequest.findOne({
+      userId: req.user._id,
+      status: 'pending',
+    });
+
+    if (existingRequest) {
+      return res.status(400).json({
         success: false,
-        message: 'Invalid government credentials'
+        message: 'You already have a pending government authorization request',
       });
     }
 
-    // Update user to be government authorized
+    // Check if user is already authorized
     const user = await User.findById(req.user._id);
-    if (!user) {
-      return res.status(404).json({
+    if (user.isGovernmentAuthorized) {
+      return res.status(400).json({
         success: false,
-        message: 'User not found'
+        message: 'You are already government authorized',
       });
     }
 
-    user.isGovernmentAuthorized = true;
-    await user.save();
+    // Create the request
+    const request = await GovAuthorizationRequest.create({
+      userId: req.user._id,
+      email: email.toLowerCase().trim(),
+      status: 'pending',
+    });
 
     res.json({
       success: true,
-      message: 'Government authorization successful',
-      user: {
-        id: user._id.toString(),
-        name: user.name,
-        email: user.email,
-        isAdmin: user.isAdmin || false,
-        isGovernmentAuthorized: user.isGovernmentAuthorized,
+      message: 'Government authorization request created successfully',
+      request: {
+        _id: request._id,
+        userId: request.userId,
+        email: request.email,
+        status: request.status,
+        createdAt: request.createdAt,
       },
     });
   } catch (error) {

@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { MapContainer, TileLayer, useMapEvents, useMap } from 'react-leaflet';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { potholeApi, Pothole } from '../services/potholeApi';
@@ -11,6 +11,8 @@ import {
   usePotholeSelection,
   SelectedPothole,
 } from '../context/PotholeSelectionContext';
+import { contractorAssignmentApi } from '../services/contractorAssignmentApi';
+import { useAuth } from '../context/AuthContext';
 
 // Default center: Bangalore, India
 const DEFAULT_CENTER: [number, number] = [12.9716, 77.5946];
@@ -100,14 +102,37 @@ const SelectionFocusController = ({ focus }: { focus: { lat: number; lng: number
 const MapView = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { setSelection } = usePotholeSelection();
+  const { setSelection, clearSelection } = usePotholeSelection();
+  const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [mapType, setMapType] = useState<'osm' | 'satellite'>('osm');
   const [showMajorRoads, setShowMajorRoads] = useState(false);
   const [mapLocation, setMapLocation] = useState({ lat: DEFAULT_CENTER[0], lng: DEFAULT_CENTER[1], zoom: 13 });
+  
+  // Check URL params for assignMode
+  const searchParams = new URLSearchParams(location.search);
+  const assignMode = searchParams.get('assignMode') === 'true';
+  
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedMap, setSelectedMap] = useState<Record<string, SelectedPothole>>({});
   const [pendingPreselect, setPendingPreselect] = useState<string[]>([]);
   const [focusPoint, setFocusPoint] = useState<{ lat: number; lng: number } | null>(null);
+  const [contractorName, setContractorName] = useState('');
+
+  const createAssignmentMutation = useMutation({
+    mutationFn: contractorAssignmentApi.createAssignment,
+    onSuccess: () => {
+      toast.success('Contractor assignment created successfully');
+      queryClient.invalidateQueries({ queryKey: ['contractorAssignments'] });
+      queryClient.invalidateQueries({ queryKey: ['potholes'] });
+      setContractorName('');
+      exitSelectionMode();
+      navigate('/assignments');
+    },
+    onError: () => {
+      toast.error('Failed to create assignment');
+    },
+  });
 
   const { data: apiPotholes, isLoading, error } = useQuery({
     queryKey: ['potholes'],
@@ -165,21 +190,28 @@ const MapView = () => {
 
   const selectionNavState = location.state as SelectionNavState;
 
+  // Initialize selection mode from URL or state
   useEffect(() => {
-    if (selectionNavState?.selectionMode) {
+    if (assignMode || selectionNavState?.selectionMode) {
       setSelectionMode(true);
-      if (selectionNavState.preselect?.length) {
+      if (selectionNavState?.preselect?.length) {
         setPendingPreselect(selectionNavState.preselect);
       }
-      if (selectionNavState.focus) {
+      if (selectionNavState?.focus) {
         setFocusPoint({
           lat: selectionNavState.focus.lat,
           lng: selectionNavState.focus.lng,
         });
       }
-      navigate(location.pathname, { replace: true, state: null });
+      // Clean up URL params but keep assignMode
+      if (assignMode) {
+        // Keep assignMode in URL
+        navigate(`${location.pathname}?assignMode=true`, { replace: true });
+      } else {
+        navigate(location.pathname, { replace: true, state: null });
+      }
     }
-  }, [selectionNavState, navigate, location.pathname]);
+  }, [assignMode, selectionNavState, navigate, location.pathname]);
 
   useEffect(() => {
     if (!selectionMode || pendingPreselect.length === 0) return;
@@ -236,6 +268,8 @@ const MapView = () => {
     setSelectedMap({});
     setPendingPreselect([]);
     setFocusPoint(null);
+    setContractorName('');
+    clearSelection();
   };
 
   const handleConfirmSelection = () => {
@@ -338,30 +372,80 @@ const MapView = () => {
         ) : (
           <div className="relative h-full w-full">
             {selectionMode && (
-              <div className="absolute top-4 left-1/2 z-[1200] -translate-x-1/2">
-                <div className="flex items-center gap-4 rounded-full border border-primary-100 bg-white/95 px-5 py-3 shadow-card">
-                  <span className="text-sm font-semibold text-primary-700">
-                    Selection mode · {selectedCount} selected
-                  </span>
-                  <div className="flex items-center gap-2 text-xs font-medium">
-                    <button
-                      type="button"
-                      onClick={handleCancelSelection}
-                      className="rounded-full border border-surface-200 px-3 py-1 text-ink-500 hover:border-ink-400"
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      type="button"
-                      disabled={selectedCount === 0}
-                      onClick={handleConfirmSelection}
-                      className="rounded-full bg-primary-600 px-3 py-1 text-white disabled:opacity-50"
-                    >
-                      Confirm
-                    </button>
+              <>
+                <div className="absolute top-4 left-1/2 z-[1200] -translate-x-1/2">
+                  <div className="flex items-center gap-4 rounded-full border border-primary-100 bg-white/95 px-5 py-3 shadow-card">
+                    <span className="text-sm font-semibold text-primary-700">
+                      {assignMode ? 'Assignment mode' : 'Selection mode'} · {selectedCount} selected
+                    </span>
+                    <div className="flex items-center gap-2 text-xs font-medium">
+                      <button
+                        type="button"
+                        onClick={handleCancelSelection}
+                        className="rounded-full border border-surface-200 px-3 py-1 text-ink-500 hover:border-ink-400"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        disabled={selectedCount === 0}
+                        onClick={handleConfirmSelection}
+                        className="rounded-full bg-primary-600 px-3 py-1 text-white disabled:opacity-50"
+                      >
+                        {assignMode ? 'Continue to Assign' : 'Confirm'}
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
+                
+                {/* Floating drawer for assign mode */}
+                {assignMode && selectedCount > 0 && (
+                  <div className="absolute bottom-4 right-4 z-[1200] bg-white rounded-lg shadow-lg border border-gray-200 p-4 w-80">
+                    <h3 className="font-semibold text-gray-900 mb-3">
+                      Assign to Contractor
+                    </h3>
+                    <div className="space-y-3">
+                      <div>
+                        <label className="block text-xs font-medium text-gray-700 mb-1">
+                          Contractor Name
+                        </label>
+                        <input
+                          type="text"
+                          value={contractorName}
+                          onChange={(e) => setContractorName(e.target.value)}
+                          placeholder="Enter contractor name"
+                          className="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-primary-500 focus:ring-2 focus:ring-primary-100"
+                        />
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {selectedCount} pothole{selectedCount !== 1 ? 's' : ''} selected
+                      </div>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!contractorName.trim()) {
+                            toast.error('Enter contractor name');
+                            return;
+                          }
+                          if (selectedCount === 0) {
+                            toast.error('Select at least one pothole');
+                            return;
+                          }
+                          // Create assignment directly
+                          createAssignmentMutation.mutate({
+                            contractorName: contractorName.trim(),
+                            potholeIds: selectedList.map((item) => item._id),
+                          });
+                        }}
+                        disabled={!contractorName.trim() || createAssignmentMutation.isPending || selectedCount === 0}
+                        className="w-full bg-primary-600 text-white rounded py-2 text-sm font-medium hover:bg-primary-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {createAssignmentMutation.isPending ? 'Creating...' : 'Assign'}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </>
             )}
             <MapContainer
               center={center}

@@ -7,6 +7,9 @@ import { dirname, join } from 'path';
 import authRoutes from './auth/auth.routes.js';
 import assignmentRoutes from './routes/assignment.routes.js';
 import potholeRoutes from './routes/pothole.routes.js';
+import govRequestRoutes from './routes/govRequest.routes.js';
+import contractorAssignmentRoutes from './routes/contractorAssignment.routes.js';
+import adminRoutes from './routes/admin.routes.js';
 
 // Get current directory for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -45,6 +48,9 @@ app.use(express.urlencoded({ extended: true }));
 app.use('/api/auth', authRoutes);
 app.use('/api/assignments', assignmentRoutes);
 app.use('/api/potholes', potholeRoutes);
+app.use('/api/gov-requests', govRequestRoutes);
+app.use('/api/contractor-assignments', contractorAssignmentRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

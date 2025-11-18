@@ -51,8 +51,8 @@ export const authApi = {
     return response.data;
   },
 
-  governmentAuthorize: async (username: string, password: string): Promise<AuthResponse> => {
-    const response = await apiClient.post<AuthResponse>('/auth/government-authorize', { username, password });
+  governmentAuthorize: async (email: string, password: string): Promise<AuthResponse> => {
+    const response = await apiClient.post<AuthResponse>('/auth/government-authorize', { email, password });
     return response.data;
   },
 };

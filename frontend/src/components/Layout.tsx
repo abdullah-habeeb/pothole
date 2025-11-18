@@ -1,9 +1,11 @@
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../context/AuthContext';
 import { toast } from 'sonner';
 import GovernmentAuthModal from './GovernmentAuthModal';
 import AdminAuthModal from './AdminAuthModal';
+import { govRequestApi } from '../services/govRequestApi';
 
 const Layout = () => {
   const location = useLocation();
@@ -12,6 +14,19 @@ const Layout = () => {
   const [showGovtModal, setShowGovtModal] = useState(false);
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [isMobileNavOpen, setIsMobileNavOpen] = useState(false);
+
+  // Check for pending government request
+  const { data: govRequest } = useQuery({
+    queryKey: ['myGovRequest'],
+    queryFn: govRequestApi.getMyRequest,
+    enabled: !!user && !user.isGovernmentAuthorized,
+    refetchInterval: 30000, // Check every 30 seconds
+  });
+
+  const govRequestStatus = govRequest?.request?.status;
+  const hasPendingRequest = govRequestStatus === 'pending';
+  const isGovAuthorized = user?.isGovernmentAuthorized || false;
+  const isAdmin = user?.isAdmin || false;
 
   const handleLogout = async () => {
     try {
@@ -27,6 +42,8 @@ const Layout = () => {
     { path: '/dashboard', label: 'Dashboard', icon: '📊' },
     { path: '/upload', label: 'Upload', icon: '📤' },
     { path: '/map', label: 'Map', icon: '🗺️' },
+    ...(isGovAuthorized ? [{ path: '/assignments', label: 'Assignments', icon: '📋' }] : []),
+    ...(isAdmin ? [{ path: '/admin-panel', label: 'Admin Panel', icon: '🔐' }] : []),
     { path: '/admin', label: 'Admin', icon: '⚙️' },
   ];
 
@@ -71,30 +88,54 @@ const Layout = () => {
 
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-2">
-                {user?.isAdmin && (
-                  <span className="metric-chip bg-purple-50 text-purple-700 border border-purple-100">
-                    🔐 Admin
+                {isAdmin && (
+                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-100">
+                    ✅ Admin Authorized
                   </span>
                 )}
-                <span
-                  className={`metric-chip border ${
-                    user?.isGovernmentAuthorized
-                      ? 'bg-green-50 text-green-700 border-green-100'
-                      : 'bg-surface-100 text-ink-500 border-surface-200'
-                  }`}
-                >
-                  🏛️ {user?.isGovernmentAuthorized ? 'Government Authorized' : 'Government Pending'}
-                </span>
+                {isGovAuthorized && (
+                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-100">
+                    ✅ Government Authorized
+                  </span>
+                )}
+                {hasPendingRequest && !isGovAuthorized && (
+                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-yellow-50 text-yellow-700 border border-yellow-100">
+                    ⏳ Government Request Pending
+                  </span>
+                )}
+                {!isGovAuthorized && !hasPendingRequest && (
+                  <span className="px-3 py-1 rounded-full text-xs font-semibold bg-red-50 text-red-700 border border-red-100">
+                    ❌ Government Unauthorized
+                  </span>
+                )}
               </div>
 
               <div className="hidden md:flex items-center gap-2">
-                <button
-                  onClick={() => setShowGovtModal(true)}
-                  className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
-                >
-                  {user?.isGovernmentAuthorized ? 'Gov Panel' : 'Gov Authorization'}
-                </button>
-                {!user?.isAdmin && (
+                {isGovAuthorized && (
+                  <Link
+                    to="/assignments"
+                    className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
+                  >
+                    Gov Panel
+                  </Link>
+                )}
+                {!isGovAuthorized && !hasPendingRequest && (
+                  <button
+                    onClick={() => setShowGovtModal(true)}
+                    className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
+                  >
+                    Request Gov Access
+                  </button>
+                )}
+                {isAdmin && (
+                  <Link
+                    to="/admin-panel"
+                    className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 transition-colors"
+                  >
+                    Admin Panel
+                  </Link>
+                )}
+                {!isAdmin && (
                   <button
                     onClick={() => setShowAdminModal(true)}
                     className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 transition-colors"
@@ -140,16 +181,36 @@ const Layout = () => {
                     <span>{item.label}</span>
                   </Link>
                 ))}
-                <button
-                  onClick={() => {
-                    setIsMobileNavOpen(false);
-                    setShowGovtModal(true);
-                  }}
-                  className="w-full mt-2 px-3 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium"
-                >
-                  {user?.isGovernmentAuthorized ? 'Gov Panel' : 'Gov Authorization'}
-                </button>
-                {!user?.isAdmin && (
+                {isGovAuthorized && (
+                  <Link
+                    to="/assignments"
+                    onClick={() => setIsMobileNavOpen(false)}
+                    className="w-full mt-2 px-3 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium text-center"
+                  >
+                    Gov Panel
+                  </Link>
+                )}
+                {!isGovAuthorized && !hasPendingRequest && (
+                  <button
+                    onClick={() => {
+                      setIsMobileNavOpen(false);
+                      setShowGovtModal(true);
+                    }}
+                    className="w-full mt-2 px-3 py-2 rounded-lg bg-primary-600 text-white text-sm font-medium"
+                  >
+                    Request Gov Access
+                  </button>
+                )}
+                {isAdmin && (
+                  <Link
+                    to="/admin-panel"
+                    onClick={() => setIsMobileNavOpen(false)}
+                    className="w-full mt-2 px-3 py-2 rounded-lg bg-purple-600 text-white text-sm font-medium text-center"
+                  >
+                    Admin Panel
+                  </Link>
+                )}
+                {!isAdmin && (
                   <button
                     onClick={() => {
                       setIsMobileNavOpen(false);
@@ -178,6 +239,10 @@ const Layout = () => {
         onClose={() => setShowGovtModal(false)}
         onSuccess={async () => {
           await refreshUser();
+          // Refetch request status
+          setTimeout(() => {
+            window.location.reload();
+          }, 1000);
         }}
       />
       <AdminAuthModal

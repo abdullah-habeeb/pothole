@@ -1,6 +1,6 @@
 import { useState, FormEvent } from 'react';
 import { toast } from 'sonner';
-import { authApi } from '../services/authApi';
+import { govRequestApi } from '../services/govRequestApi';
 
 interface GovernmentAuthModalProps {
   isOpen: boolean;
@@ -14,27 +14,24 @@ const GovernmentAuthModal = ({ isOpen, onClose, onSuccess }: GovernmentAuthModal
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Hardcoded government credentials for prototype
-  const GOVT_EMAIL = 'govt@admin.com';
-  const GOVT_PASSWORD = 'admin123';
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      const response = await authApi.governmentAuthorize(email.trim(), password);
-      if (response.success && response.user) {
-        toast.success('Government authorization successful');
+      const response = await govRequestApi.createRequest(email.trim(), password);
+      if (response.success && response.request) {
+        toast.success('Government authorization request created. Waiting for admin approval.');
         onSuccess();
         setEmail('');
         setPassword('');
         onClose();
       } else {
-        toast.error(response.message || 'Invalid government credentials');
+        toast.error(response.message || 'Failed to create request');
       }
     } catch (error) {
-      toast.error('Failed to authorize government access');
+      toast.error('Failed to create government authorization request');
     } finally {
       setLoading(false);
     }
@@ -62,9 +59,9 @@ const GovernmentAuthModal = ({ isOpen, onClose, onSuccess }: GovernmentAuthModal
         </div>
 
         <div className="rounded-xl border border-blue-100 bg-blue-50/70 px-4 py-3 text-sm text-blue-800">
-          <p className="font-medium">Demo credentials</p>
+          <p className="font-medium">Request Government Access</p>
           <p className="text-xs mt-1">
-            {GOVT_EMAIL} / {GOVT_PASSWORD}
+            Your request will be reviewed by an administrator. You'll be notified once approved.
           </p>
         </div>
 
@@ -106,7 +103,7 @@ const GovernmentAuthModal = ({ isOpen, onClose, onSuccess }: GovernmentAuthModal
                 {showPassword ? 'Hide' : 'Show'}
               </button>
             </div>
-            <p className="text-xs text-ink-400">Only authorized officials may proceed.</p>
+            <p className="text-xs text-ink-400">Enter your government email to request access.</p>
           </div>
 
           <div className="flex flex-col sm:flex-row justify-end gap-3 pt-2">
@@ -122,7 +119,7 @@ const GovernmentAuthModal = ({ isOpen, onClose, onSuccess }: GovernmentAuthModal
               disabled={loading}
               className="px-4 py-2 text-sm font-semibold text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-60 disabled:cursor-not-allowed transition-colors"
             >
-              {loading ? 'Verifying…' : 'Authorize access'}
+              {loading ? 'Submitting…' : 'Submit Request'}
             </button>
           </div>
         </form>

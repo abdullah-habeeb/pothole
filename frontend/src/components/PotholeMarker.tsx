@@ -2,6 +2,7 @@ import { Marker, Popup } from 'react-leaflet';
 import { DivIcon } from 'leaflet';
 import { Pothole } from '../services/potholeApi';
 import { isValidPotholeForMap } from '../utils/potholeUtils';
+import { useMemo } from 'react';
 
 interface PotholeMarkerProps {
   pothole: unknown;
@@ -54,37 +55,47 @@ export const PotholeMarker = ({
   isSelected = false,
   onToggleSelect,
 }: PotholeMarkerProps) => {
-  if (!isValidPotholeForMap(pothole)) {
+  // Memoize validation to prevent unnecessary re-renders
+  const isValid = useMemo(() => isValidPotholeForMap(pothole), [pothole]);
+  
+  if (!isValid) {
     return null;
   }
 
   const p = pothole as Pothole;
+  const thumbnail = p.previewImage ? `data:image/jpeg;base64,${p.previewImage}` : null;
+
+  // Memoize event handlers to prevent re-renders
+  const eventHandlers = useMemo(() => {
+    if (!selectionMode || !onToggleSelect) {
+      return undefined;
+    }
+    return {
+      click: () => {
+        onToggleSelect(p);
+      },
+    };
+  }, [selectionMode, onToggleSelect, p]);
 
   return (
     <Marker
       position={[p.latitude, p.longitude]}
-      icon={getMarkerIcon(p.severity, isSelected)}
-      eventHandlers={
-        selectionMode
-          ? {
-              click: () => onToggleSelect?.(p),
-            }
-          : undefined
-      }
+      icon={getMarkerIcon(p.severity || 'low', isSelected)}
+      eventHandlers={eventHandlers}
     >
       <Popup>
         <div className="p-2 min-w-[200px]">
-          {p.thumbnail && (
+          {thumbnail && (
             <img
-              src={p.thumbnail}
-              alt={`Pothole ${p.id}`}
+              src={thumbnail}
+              alt={`Pothole ${p._id}`}
               className="w-full h-32 object-cover rounded mb-2"
               onError={(e) => {
                 e.currentTarget.style.display = 'none';
               }}
             />
           )}
-          <h3 className="font-semibold text-sm mb-2">Pothole #{p.id}</h3>
+          <h3 className="font-semibold text-sm mb-2">Pothole #{p._id.slice(-6)}</h3>
           <div className="space-y-1 text-xs text-gray-600">
             <p>
               <strong>Severity:</strong>{' '}
@@ -94,17 +105,22 @@ export const PotholeMarker = ({
               <strong>Status:</strong>{' '}
               <span className="capitalize">{(p.status || 'unknown').replace('_', ' ')}</span>
             </p>
-            {p.depth_estimation && typeof p.depth_estimation === 'number' && (
-              <p>
-                <strong>Depth:</strong> {p.depth_estimation.toFixed(2)} cm
-              </p>
-            )}
             <p>
               <strong>Coordinates:</strong>
             </p>
             <p className="pl-2">
               {p.latitude.toFixed(6)}, {p.longitude.toFixed(6)}
             </p>
+            {typeof p.confidence === 'number' && (
+              <p>
+                <strong>Confidence:</strong> {(p.confidence * 100).toFixed(1)}%
+              </p>
+            )}
+            {p.gpsMatch?.source && (
+              <p>
+                <strong>GPS Source:</strong> {p.gpsMatch.source}
+              </p>
+            )}
           </div>
           {selectionMode && (
             <button

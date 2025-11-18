@@ -16,11 +16,7 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { CardSkeleton } from '../components/LoadingSkeleton';
-import { FAKE_STATS } from '../utils/potholeUtils';
 import GovernmentManagementPanel from '../components/GovernmentManagementPanel';
-
-// Toggle for fake data - set to true to use test data
-const USE_FAKE_DATA = true;
 
 const COLORS = {
   low: '#22c55e',
@@ -37,7 +33,7 @@ const Dashboard = () => {
   const [startDate, setStartDate] = useState<string>('');
   const [endDate, setEndDate] = useState<string>('');
 
-  const { data: apiStats, isLoading, error } = useQuery({
+  const { data: stats, isLoading, error } = useQuery({
     queryKey: ['potholeStats', severityFilter, statusFilter, startDate, endDate],
     queryFn: () =>
       potholeApi.getPotholeStats({
@@ -48,11 +44,7 @@ const Dashboard = () => {
       }),
     retry: false,
     refetchOnWindowFocus: false,
-    enabled: !USE_FAKE_DATA, // Only fetch if not using fake data
   });
-
-  // Use fake stats if enabled, otherwise use API stats
-  const stats = USE_FAKE_DATA ? FAKE_STATS : apiStats || FAKE_STATS;
 
   const severityData = stats?.severity_count
     ? [
@@ -91,11 +83,6 @@ const Dashboard = () => {
       <div className="bg-white shadow rounded-lg p-6">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
-          {USE_FAKE_DATA && (
-            <div className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-md text-sm font-medium">
-              🧪 Using Fake Test Data
-            </div>
-          )}
         </div>
 
         {/* Filters */}
@@ -158,7 +145,7 @@ const Dashboard = () => {
         </div>
       </div>
 
-      {isLoading && !USE_FAKE_DATA ? (
+      {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <CardSkeleton />
           <CardSkeleton />

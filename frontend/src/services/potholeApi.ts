@@ -1,25 +1,74 @@
 import apiClient from './apiClient';
 
 export type Severity = 'low' | 'medium' | 'high';
+export type DetectionSeverity = Severity | 'none';
 export type Status = 'open' | 'in_progress' | 'fixed';
 
-export interface Pothole {
-  id: number;
-  latitude: number;
-  longitude: number;
-  severity: Severity;
-  status: Status;
-  thumbnail: string;
-  depth_estimation?: number;
-  created_at: string;
-  updated_at: string;
-  contractor?: string;
-  assigned_contractor?: string;
+export interface PotholeDetectionMeta {
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
 }
 
-export interface UploadVideoResponse {
+export interface PotholeGpsMatch {
+  latitude: number | null;
+  longitude: number | null;
+  timestamp?: number | null;
+  source?: 'timestamp' | 'index' | 'none';
+}
+
+export interface Pothole {
+  _id: string;
+  videoId: string;
+  severity: Severity;
+  status: Status;
+  latitude: number | null;
+  longitude: number | null;
+  previewImage: string | null;
+  confidence: number;
+  detectionMeta?: PotholeDetectionMeta;
+  gpsMatch?: PotholeGpsMatch;
+  assignedContractor?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MLPotholeDetection {
+  confidence: number;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  preview_image?: string;  // Made optional for safety
+  timestamp?: number | string | null;
+  severity?: string;  // Added optional severity field
+}
+
+export interface ParsedGpsPoint {
+  latitude: number;
+  longitude: number;
+  timestamp?: number | string | null;
+}
+
+export interface UploadDetectionsPayload {
+  severity: DetectionSeverity;
+  previewImage: string | null;
+  potholes: MLPotholeDetection[];
+  gps: ParsedGpsPoint[];
+  video_id?: string;
+}
+
+export interface UploadDetectionsResponse {
+  success: boolean;
+  video: {
+    video_id: string;
+    severity: DetectionSeverity;
+    previewImage: string | null;
+    pothole_count: number;
+    gps_points: number;
+  };
   potholes: Pothole[];
-  video_id: string;
 }
 
 export interface PotholeStats {
@@ -34,7 +83,7 @@ export interface PotholeStats {
     fixed: number;
   };
   total_count: number;
-  by_date?: Array<{
+  by_date: Array<{
     date: string;
     count: number;
   }>;
@@ -42,98 +91,48 @@ export interface PotholeStats {
 
 export interface UpdatePotholeData {
   status?: Status;
-  assigned_contractor?: string;
+  assigned_contractor?: string | null;
 }
 
 export const potholeApi = {
-  uploadVideo: async (
-    videoFile: File,
-    latitude?: number,
-    longitude?: number
-  ): Promise<UploadVideoResponse> => {
-    try {
-      const formData = new FormData();
-      formData.append('video', videoFile);
-      if (latitude !== undefined) {
-        formData.append('latitude', latitude.toString());
-      }
-      if (longitude !== undefined) {
-        formData.append('longitude', longitude.toString());
-      }
-
-      const response = await apiClient.post<UploadVideoResponse>(
-        '/upload-video/',
-        formData,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data',
-          },
-        }
-      );
-      return response.data;
-    } catch (error) {
-      throw new Error('Backend server is not available. Please ensure the backend is running.');
-    }
+  async saveDetections(payload: UploadDetectionsPayload): Promise<UploadDetectionsResponse> {
+    // Use longer timeout (60s) but backend should respond in < 500ms
+    const response = await apiClient.post<UploadDetectionsResponse>('/potholes/upload', payload, {
+      timeout: 60000, // 60 second timeout
+    });
+    return response.data;
   },
 
-  getAllPotholes: async (): Promise<Pothole[]> => {
-    try {
-      const response = await apiClient.get<Pothole[]>('/potholes/');
-      // ALWAYS ensure response is an array
-      const data = response.data;
-      if (Array.isArray(data)) {
-        return data;
-      }
-      console.warn('Backend returned non-array data, returning empty array');
-      return [];
-    } catch (error) {
-      // Return empty array if backend is not available (for graceful degradation)
-      console.warn('Backend not available, returning empty potholes array');
-      return [];
-    }
+  async getAllPotholes(): Promise<Pothole[]> {
+    const response = await apiClient.get<{ success: boolean; potholes: Pothole[] }>('/potholes');
+    return Array.isArray(response.data?.potholes) ? response.data.potholes : [];
   },
 
-  getPotholeStats: async (params?: {
+  async getPotholeStats(params?: {
     severity?: Severity;
     status?: Status;
     start_date?: string;
     end_date?: string;
-  }): Promise<PotholeStats> => {
-    try {
-      const response = await apiClient.get<PotholeStats>('/potholes/stats/', {
-        params,
-      });
-      return response.data;
-    } catch (error) {
-      // Return empty stats if backend is not available (for graceful degradation)
-      console.warn('Backend not available, returning empty stats');
-      return {
-        severity_count: {
-          low: 0,
-          medium: 0,
-          high: 0,
-        },
-        status_count: {
-          open: 0,
-          in_progress: 0,
-          fixed: 0,
-        },
-        total_count: 0,
-      };
-    }
-  },
-
-  updatePothole: async (
-    id: number,
-    data: UpdatePotholeData
-  ): Promise<Pothole> => {
-    const response = await apiClient.patch<Pothole>(`/potholes/${id}/`, data);
+  }): Promise<PotholeStats> {
+    const response = await apiClient.get<{ success: boolean } & PotholeStats>('/potholes/stats', {
+      params,
+    });
     return response.data;
   },
 
-  getPotholeById: async (id: number): Promise<Pothole> => {
-    const response = await apiClient.get<Pothole>(`/potholes/${id}/`);
-    return response.data;
+  async updatePothole(id: string, data: UpdatePotholeData): Promise<Pothole> {
+    const response = await apiClient.patch<{ success: boolean; pothole: Pothole }>(
+      `/potholes/${id}`,
+      data
+    );
+    return response.data.pothole;
+  },
+
+  async getPotholeById(id: string): Promise<Pothole> {
+    const response = await apiClient.get<{ success: boolean; pothole: Pothole }>(
+      `/potholes/${id}`
+    );
+    return response.data.pothole;
   },
 };
 

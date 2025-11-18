@@ -65,33 +65,36 @@ export const generateUserPotholes = (userId: string, email?: string): Pothole[] 
     const severity = severities[rng.nextInt(0, 2)];
     const status = statuses[rng.nextInt(0, 2)];
     
-    // Depth based on severity
-    const depth = severity === 'high' 
-      ? rng.nextFloat(5, 12) 
-      : severity === 'medium' 
-      ? rng.nextFloat(2, 6) 
-      : rng.nextFloat(0.5, 3);
-    
     const now = new Date();
     const daysAgo = rng.nextInt(0, 30);
     const createdAt = new Date(now.getTime() - daysAgo * 24 * 60 * 60 * 1000);
     const updatedAt = new Date(createdAt.getTime() + rng.nextInt(0, 5) * 24 * 60 * 60 * 1000);
     
     potholes.push({
-      id: seed + i * 1000, // Ensure unique IDs
+      _id: `${seed}-${i}`,
+      videoId: `video-${seed}`,
       latitude: lat,
       longitude: lng,
       severity,
       status,
-      depth_estimation: depth,
-      thumbnail: '',
-      created_at: createdAt.toISOString(),
-      updated_at: updatedAt.toISOString(),
-      ...(status === 'in_progress' && rng.next() > 0.5 ? {
-        contractor: `Contractor ${rng.nextInt(1, 5)}`,
-        assigned_contractor: `Contractor ${rng.nextInt(1, 5)}`
-      } : {})
-    });
+      previewImage: null,
+      confidence: rng.nextFloat(0.4, 0.95),
+      detectionMeta: {
+        x: rng.nextFloat(100, 520),
+        y: rng.nextFloat(100, 360),
+        width: rng.nextFloat(40, 180),
+        height: rng.nextFloat(40, 180),
+      },
+      gpsMatch: {
+        latitude: lat,
+        longitude: lng,
+        timestamp: createdAt.getTime(),
+        source: 'index',
+      },
+      assignedContractor: status === 'in_progress' ? `Contractor ${rng.nextInt(1, 5)}` : null,
+      createdAt: createdAt.toISOString(),
+      updatedAt: updatedAt.toISOString(),
+    } as Pothole);
   }
   
   return potholes;
@@ -104,14 +107,15 @@ export const generateUserStats = (potholes: Pothole[]): PotholeStats => {
   const stats: PotholeStats = {
     severity_count: { low: 0, medium: 0, high: 0 },
     status_count: { open: 0, in_progress: 0, fixed: 0 },
-    total_count: potholes.length
+    total_count: potholes.length,
+    by_date: [],
   };
-  
-  potholes.forEach(pothole => {
+
+  potholes.forEach((pothole) => {
     stats.severity_count[pothole.severity]++;
     stats.status_count[pothole.status]++;
   });
-  
+
   return stats;
 };
 

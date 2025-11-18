@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import authRoutes from './auth/auth.routes.js';
 import assignmentRoutes from './routes/assignment.routes.js';
+import potholeRoutes from './routes/pothole.routes.js';
 
 // Get current directory for ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -17,26 +18,52 @@ dotenv.config({ path: join(__dirname, '.env') });
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Middleware
+// Middleware - CORS with better error handling
+const allowedOrigins = process.env.FRONTEND_URL 
+  ? [process.env.FRONTEND_URL, 'http://localhost:3001', 'http://localhost:3000']
+  : ['http://localhost:3001', 'http://localhost:3000', 'http://127.0.0.1:3001', 'http://127.0.0.1:3000'];
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      // In development, allow all origins
+      callback(null, true);
+    }
+  },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  exposedHeaders: ['Content-Length', 'X-Foo', 'X-Bar']
 }));
-app.use(express.json());
+app.use(express.json({ limit: '25mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/assignments', assignmentRoutes);
+app.use('/api/potholes', potholeRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'OK', 
     message: 'Server is running',
-    mongodb: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+    mongodb: isMongoConnected() ? 'connected' : 'disconnected',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// API health check
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    success: true,
+    status: 'OK', 
+    message: 'API is running',
+    mongodb: isMongoConnected() ? 'connected' : 'disconnected',
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -56,41 +83,55 @@ if (process.env.NODE_ENV === 'development') {
 // MongoDB connection
 const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://1by23cs002:<db_password>@cluster0.vdahqj1.mongodb.net/pothole-detection?retryWrites=true&w=majority&appName=Cluster0';
 
+// Helper to check MongoDB connection
+const isMongoConnected = () => {
+  return mongoose.connection.readyState === 1;
+};
+
 // Start server first (don't wait for MongoDB)
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📡 Health check: http://localhost:${PORT}/health`);
   console.log(`🔗 API endpoints: http://localhost:${PORT}/api/auth/*`);
+  console.log(`🌐 CORS enabled for: ${process.env.FRONTEND_URL || 'http://localhost:3001'}`);
 });
 
-// Connect to MongoDB
-mongoose
-  .connect(MONGO_URI, {
-    serverSelectionTimeoutMS: 30000, // Increased timeout for Atlas connection
-  })
-  .then(() => {
+// Connect to MongoDB with retry logic
+const connectMongoDB = async () => {
+  try {
+    if (MONGO_URI.includes('<db_password>')) {
+      console.warn('\n⚠️  WARNING: MONGO_URI contains placeholder. Using fallback connection.');
+      console.warn('   → Create .env file in backend/ directory with your actual MONGO_URI');
+      return;
+    }
+    
+    await mongoose.connect(MONGO_URI, {
+      serverSelectionTimeoutMS: 10000, // 10 second timeout
+      socketTimeoutMS: 45000,
+      maxPoolSize: 10,
+    });
+    
     console.log('✅ MongoDB connected successfully');
     console.log(`📊 Database: ${mongoose.connection.name}`);
-  })
-  .catch((error) => {
+  } catch (error) {
     console.error('\n❌ MongoDB connection error:', error.message);
     console.error('\n🔧 MongoDB Atlas Troubleshooting:');
     console.error('1. Check if .env file exists in backend/ directory');
-    console.error('2. Verify MONGO_URI in .env has your actual password (replace <db_password>)');
-    console.error('3. Whitelist your IP in MongoDB Atlas:');
-    console.error('   - Go to MongoDB Atlas → Network Access');
-    console.error('   - Click "Add IP Address" → "Allow Access from Anywhere" (for dev)');
-    console.error('   - Or add your current IP address');
+    console.error('2. Verify MONGO_URI in .env has your actual password');
+    console.error('3. Whitelist your IP in MongoDB Atlas → Network Access');
     console.error('4. Verify your MongoDB Atlas cluster is running');
-    console.error('5. Check if password has special characters (may need URL encoding)');
-    console.error(`\n💡 Connection string format: mongodb+srv://USERNAME:PASSWORD@cluster...`);
-    if (MONGO_URI.includes('<db_password>')) {
-      console.error('\n⚠️  WARNING: Connection string still contains <db_password> placeholder!');
-      console.error('   → Create .env file in backend/ directory with your actual password');
-    }
-    console.error('\n📖 See backend/MONGODB_FIX.md for detailed instructions\n');
-    console.error('⚠️  Server is running but authentication routes will not work until MongoDB is connected\n');
-  });
+    console.error('\n⚠️  Server is running but some routes may not work until MongoDB is connected\n');
+    
+    // Retry connection after 30 seconds
+    setTimeout(() => {
+      console.log('🔄 Retrying MongoDB connection...');
+      connectMongoDB();
+    }, 30000);
+  }
+};
+
+// Initial connection attempt
+connectMongoDB();
 
 // Handle MongoDB connection events
 mongoose.connection.on('error', (err) => {

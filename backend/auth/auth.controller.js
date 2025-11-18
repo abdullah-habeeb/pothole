@@ -1,4 +1,5 @@
 import User from '../models/User.js';
+import mongoose from 'mongoose';
 import jwt from 'jsonwebtoken';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
@@ -94,6 +95,15 @@ export const signup = async (req, res) => {
 // @access  Public
 export const login = async (req, res) => {
   try {
+    // Check MongoDB connection
+    if (mongoose.connection.readyState !== 1) {
+      console.error('Login attempt failed: MongoDB not connected');
+      return res.status(503).json({ 
+        success: false,
+        message: 'Database connection unavailable. Please try again in a moment.' 
+      });
+    }
+
     const { email, password } = req.body;
 
     if (!email || !password) {
@@ -152,6 +162,15 @@ export const login = async (req, res) => {
   } catch (error) {
     console.error('Login error:', error);
     console.error('Error stack:', error.stack);
+    
+    // Handle specific MongoDB errors
+    if (error.name === 'MongoNetworkError' || error.name === 'MongoServerSelectionError') {
+      return res.status(503).json({ 
+        success: false,
+        message: 'Database connection unavailable. Please try again in a moment.' 
+      });
+    }
+    
     res.status(500).json({ 
       success: false,
       message: 'Server error during login',

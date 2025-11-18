@@ -20,8 +20,21 @@ const Login = () => {
       toast.success('Logged in successfully');
       navigate('/dashboard');
     } catch (error: unknown) {
-      const errorMessage =
-        error instanceof Error ? error.message : 'Invalid email or password';
+      let errorMessage = 'Invalid email or password';
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      } else if (typeof error === 'object' && error !== null && 'message' in error) {
+        errorMessage = String(error.message);
+      }
+      
+      // Handle specific error cases
+      if (errorMessage.includes('503') || errorMessage.includes('unavailable')) {
+        errorMessage = 'Backend service is temporarily unavailable. Please try again in a moment.';
+      } else if (errorMessage.includes('Network') || errorMessage.includes('ECONNREFUSED')) {
+        errorMessage = 'Cannot connect to server. Please ensure the backend is running on port 5000.';
+      }
+      
       toast.error(errorMessage);
     } finally {
       setLoading(false);

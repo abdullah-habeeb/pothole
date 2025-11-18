@@ -4,14 +4,13 @@ import { Severity, Status } from './potholeApi';
 export type AssignmentStatus = 'ASSIGNED' | 'IN_PROGRESS' | 'FIXED';
 
 export interface AssignmentPothole {
-  potholeId: number;
+  potholeId: string;
   latitude: number;
   longitude: number;
   severity: Severity;
   status: Status;
   segmentLabel?: string;
   description?: string;
-  depth_estimation?: number;
 }
 
 export interface Assignment {
@@ -44,15 +43,15 @@ export interface CreateAssignmentPayload {
 
 export const assignmentsApi = {
   getAssignments: async (): Promise<AssignmentListsResponse> => {
-    const response = await apiClient.get<AssignmentListsResponse>('/api/assignments');
+    const response = await apiClient.get<AssignmentListsResponse>('/assignments');
     return response.data;
   },
   createAssignment: async (payload: CreateAssignmentPayload) => {
-    const response = await apiClient.post('/api/assignments', payload);
+    const response = await apiClient.post('/assignments', payload);
     return response.data;
   },
   updateStatus: async (id: string, status: AssignmentStatus) => {
-    const response = await apiClient.patch(`/api/assignments/${id}/status`, { status });
+    const response = await apiClient.patch(`/assignments/${id}/status`, { status });
     return response.data;
   },
 };

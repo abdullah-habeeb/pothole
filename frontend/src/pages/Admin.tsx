@@ -11,7 +11,7 @@ const Admin = () => {
   const { user, refreshUser } = useAuth();
   const [showAdminModal, setShowAdminModal] = useState(false);
   const queryClient = useQueryClient();
-  const [editingPothole, setEditingPothole] = useState<number | null>(null);
+  const [editingPothole, setEditingPothole] = useState<string | null>(null);
   const [statusUpdate, setStatusUpdate] = useState<Status>('open');
   const [contractorUpdate, setContractorUpdate] = useState<string>('');
 
@@ -26,7 +26,7 @@ const Admin = () => {
   const potholes = ensureArray(rawPotholes, []);
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, data }: { id: number; data: { status?: Status; assigned_contractor?: string } }) =>
+    mutationFn: ({ id, data }: { id: string; data: { status?: Status; assigned_contractor?: string | null } }) =>
       potholeApi.updatePothole(id, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['potholes'] });
@@ -46,18 +46,18 @@ const Admin = () => {
 
   const handleUpdate = (pothole: Pothole) => {
     updateMutation.mutate({
-      id: pothole.id,
+      id: pothole._id,
       data: {
         status: statusUpdate,
-        assigned_contractor: contractorUpdate || undefined,
+        assigned_contractor: contractorUpdate || null,
       },
     });
   };
 
   const startEditing = (pothole: Pothole) => {
-    setEditingPothole(pothole.id);
+    setEditingPothole(pothole._id);
     setStatusUpdate(pothole.status);
-    setContractorUpdate(pothole.assigned_contractor || '');
+    setContractorUpdate(pothole.assignedContractor || '');
   };
 
   const cancelEditing = () => {
@@ -175,7 +175,7 @@ const Admin = () => {
                     Coordinates
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Depth
+                    Confidence
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Contractor
@@ -190,12 +190,12 @@ const Admin = () => {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {potholes.map((pothole) => (
-                  <tr key={pothole.id} className="hover:bg-gray-50">
+                  <tr key={pothole._id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {pothole.thumbnail ? (
+                      {pothole.previewImage ? (
                         <img
-                          src={pothole.thumbnail}
-                          alt={`Pothole ${pothole.id}`}
+                          src={`data:image/jpeg;base64,${pothole.previewImage}`}
+                          alt={`Pothole ${pothole._id}`}
                           className="h-16 w-24 object-cover rounded"
                         />
                       ) : (
@@ -205,7 +205,7 @@ const Admin = () => {
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                      #{pothole.id}
+                      #{pothole._id.slice(-6)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span
@@ -213,11 +213,11 @@ const Admin = () => {
                           pothole.severity
                         )}`}
                       >
-                        {pothole.severity.toUpperCase()}
+                        {(pothole.severity || 'unknown').toUpperCase()}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {editingPothole === pothole.id ? (
+                      {editingPothole === pothole._id ? (
                         <select
                           value={statusUpdate}
                           onChange={(e) => setStatusUpdate(e.target.value as Status)}
@@ -233,20 +233,22 @@ const Admin = () => {
                             pothole.status
                           )}`}
                         >
-                          {pothole.status.replace('_', ' ').toUpperCase()}
+                          {(pothole.status || 'unknown').replace('_', ' ').toUpperCase()}
                         </span>
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {pothole.latitude.toFixed(6)}, {pothole.longitude.toFixed(6)}
+                      {typeof pothole.latitude === 'number' && typeof pothole.longitude === 'number'
+                        ? `${pothole.latitude.toFixed(6)}, ${pothole.longitude.toFixed(6)}`
+                        : '—'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {pothole.depth_estimation
-                        ? `${pothole.depth_estimation.toFixed(2)} cm`
+                      {typeof pothole.confidence === 'number'
+                        ? `${(pothole.confidence * 100).toFixed(1)}%`
                         : 'N/A'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {editingPothole === pothole.id ? (
+                      {editingPothole === pothole._id ? (
                         <input
                           type="text"
                           value={contractorUpdate}
@@ -256,15 +258,15 @@ const Admin = () => {
                         />
                       ) : (
                         <span className="text-sm text-gray-500">
-                          {pothole.assigned_contractor || 'Unassigned'}
+                          {pothole.assignedContractor || 'Unassigned'}
                         </span>
                       )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatDate(pothole.created_at)}
+                      {formatDate(pothole.createdAt)}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                      {editingPothole === pothole.id ? (
+                      {editingPothole === pothole._id ? (
                         <div className="flex gap-2">
                           <button
                             onClick={() => handleUpdate(pothole)}

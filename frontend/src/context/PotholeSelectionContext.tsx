@@ -3,7 +3,7 @@ import { Pothole } from '../services/potholeApi';
 
 export interface SelectedPothole extends Pick<
   Pothole,
-  'id' | 'latitude' | 'longitude' | 'severity' | 'status' | 'depth_estimation'
+  '_id' | 'latitude' | 'longitude' | 'severity' | 'status'
 > {
   segmentLabel?: string;
   description?: string;

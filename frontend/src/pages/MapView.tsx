@@ -2,11 +2,9 @@ import { useQuery } from '@tanstack/react-query';
 import { MapContainer, TileLayer, useMapEvents, useMap } from 'react-leaflet';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { potholeApi, Pothole } from '../services/potholeApi';
-import { useState, useEffect, useMemo } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import 'leaflet/dist/leaflet.css';
 import { ensureArray, isValidPotholeForMap } from '../utils/potholeUtils';
-import { generateUserPotholes } from '../utils/userDataGenerator';
 import { PotholeMarker } from '../components/PotholeMarker';
 import { toast } from 'sonner';
 import {
@@ -14,15 +12,12 @@ import {
   SelectedPothole,
 } from '../context/PotholeSelectionContext';
 
-// Toggle for fake data - set to true to use test data
-const USE_FAKE_DATA = true;
-
 // Default center: Bangalore, India
 const DEFAULT_CENTER: [number, number] = [12.9716, 77.5946];
 
 type SelectionNavState = {
   selectionMode?: boolean;
-  preselect?: number[];
+  preselect?: string[];
   focus?: { lat: number; lng: number; zoom?: number };
 } | null;
 
@@ -36,7 +31,7 @@ const getSegmentLabel = (p: Pick<Pothole, 'latitude' | 'longitude'>) => {
 const buildSelectionSummary = (items: SelectedPothole[]) => {
   if (items.length === 0) return '';
   if (items.length === 1) {
-    return items[0].segmentLabel || items[0].description || `Pothole #${items[0].id}`;
+    return items[0].segmentLabel || items[0].description || `Pothole #${items[0]._id.slice(-6)}`;
   }
   const anchor = items[0];
   return `${items.length} potholes near ${anchor.segmentLabel || anchor.description || 'selected area'}`;
@@ -44,24 +39,50 @@ const buildSelectionSummary = (items: SelectedPothole[]) => {
 
 // Component to track map center and zoom
 const MapLocationTracker = ({ onLocationChange }: { onLocationChange: (lat: number, lng: number, zoom: number) => void }) => {
-  const map = useMapEvents({
+  const map = useMap();
+  const lastUpdateRef = useRef<{ lat: number; lng: number; zoom: number } | null>(null);
+
+  useMapEvents({
     moveend: () => {
       const center = map.getCenter();
       const zoom = map.getZoom();
-      onLocationChange(center.lat, center.lng, zoom);
+      const newState = { lat: center.lat, lng: center.lng, zoom };
+      
+      // Only update if values actually changed (prevent infinite loop)
+      if (!lastUpdateRef.current || 
+          Math.abs(lastUpdateRef.current.lat - newState.lat) > 0.0001 ||
+          Math.abs(lastUpdateRef.current.lng - newState.lng) > 0.0001 ||
+          lastUpdateRef.current.zoom !== newState.zoom) {
+        lastUpdateRef.current = newState;
+        onLocationChange(newState.lat, newState.lng, newState.zoom);
+      }
     },
     zoomend: () => {
       const center = map.getCenter();
       const zoom = map.getZoom();
-      onLocationChange(center.lat, center.lng, zoom);
+      const newState = { lat: center.lat, lng: center.lng, zoom };
+      
+      // Only update if values actually changed
+      if (!lastUpdateRef.current || 
+          Math.abs(lastUpdateRef.current.lat - newState.lat) > 0.0001 ||
+          Math.abs(lastUpdateRef.current.lng - newState.lng) > 0.0001 ||
+          lastUpdateRef.current.zoom !== newState.zoom) {
+        lastUpdateRef.current = newState;
+        onLocationChange(newState.lat, newState.lng, newState.zoom);
+      }
     },
   });
 
+  // Initial location set - only once
   useEffect(() => {
-    const center = map.getCenter();
-    const zoom = map.getZoom();
-    onLocationChange(center.lat, center.lng, zoom);
-  }, [map, onLocationChange]);
+    if (!lastUpdateRef.current) {
+      const center = map.getCenter();
+      const zoom = map.getZoom();
+      lastUpdateRef.current = { lat: center.lat, lng: center.lng, zoom };
+      onLocationChange(center.lat, center.lng, zoom);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Only run once on mount
 
   return null;
 };
@@ -77,7 +98,6 @@ const SelectionFocusController = ({ focus }: { focus: { lat: number; lng: number
 };
 
 const MapView = () => {
-  const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const { setSelection } = usePotholeSelection();
@@ -85,8 +105,8 @@ const MapView = () => {
   const [showMajorRoads, setShowMajorRoads] = useState(false);
   const [mapLocation, setMapLocation] = useState({ lat: DEFAULT_CENTER[0], lng: DEFAULT_CENTER[1], zoom: 13 });
   const [selectionMode, setSelectionMode] = useState(false);
-  const [selectedMap, setSelectedMap] = useState<Record<number, SelectedPothole>>({});
-  const [pendingPreselect, setPendingPreselect] = useState<number[]>([]);
+  const [selectedMap, setSelectedMap] = useState<Record<string, SelectedPothole>>({});
+  const [pendingPreselect, setPendingPreselect] = useState<string[]>([]);
   const [focusPoint, setFocusPoint] = useState<{ lat: number; lng: number } | null>(null);
 
   const { data: apiPotholes, isLoading, error } = useQuery({
@@ -94,20 +114,10 @@ const MapView = () => {
     queryFn: () => potholeApi.getAllPotholes(),
     retry: false,
     refetchOnWindowFocus: false,
-    enabled: !USE_FAKE_DATA, // Only fetch if not using fake data
   });
 
-  // Generate user-specific demo data
-  const userPotholes = useMemo(() => {
-    if (user && USE_FAKE_DATA) {
-      return generateUserPotholes(user.id, user.email);
-    }
-    return [];
-  }, [user]);
-
   // ALWAYS ensure potholes is an array
-  const rawPotholes = USE_FAKE_DATA ? userPotholes : apiPotholes;
-  const potholes = ensureArray(rawPotholes, []);
+  const potholes = ensureArray(apiPotholes, []);
 
   // Filter out invalid potholes for map rendering
   const validPotholes = potholes.filter(isValidPotholeForMap);
@@ -118,10 +128,22 @@ const MapView = () => {
       ? [validPotholes[0].latitude, validPotholes[0].longitude]
       : DEFAULT_CENTER;
 
+  // OSM tile layer with fallback
   const osmTileLayer = (
     <TileLayer
       attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
       url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+      errorTileUrl="https://tile.openstreetmap.fr/hot/{z}/{x}/{y}.png"
+      maxZoom={19}
+    />
+  );
+
+  // Fallback OSM tile layer
+  const osmFallbackLayer = (
+    <TileLayer
+      attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors (Fallback)'
+      url="https://tile.openstreetmap.fr/hot/{z}/{x}/{y}.png"
+      maxZoom={19}
     />
   );
 
@@ -129,6 +151,7 @@ const MapView = () => {
     <TileLayer
       attribution='Tiles &copy; Esri &mdash; Source: Esri, i-cubed, USDA, USGS, AEX, GeoEye, Getmapping, Aerogrid, IGN, IGP, UPR-EGP, and the GIS User Community'
       url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
+      maxZoom={19}
     />
   );
 
@@ -163,9 +186,9 @@ const MapView = () => {
     setSelectedMap((prev) => {
       const next = { ...prev };
       pendingPreselect.forEach((id) => {
-        const match = validPotholes.find((p) => p.id === id);
+        const match = validPotholes.find((p) => p._id === id);
         if (match) {
-          next[match.id] = {
+          next[match._id] = {
             ...match,
             segmentLabel: getSegmentLabel(match),
             description: `Lat ${match.latitude.toFixed(3)}, Lng ${match.longitude.toFixed(3)}`,
@@ -183,16 +206,15 @@ const MapView = () => {
   const toggleSelection = (pothole: Pothole) => {
     setSelectedMap((prev) => {
       const draft = { ...prev };
-      if (draft[pothole.id]) {
-        delete draft[pothole.id];
+      if (draft[pothole._id]) {
+        delete draft[pothole._id];
       } else {
-        draft[pothole.id] = {
-          id: pothole.id,
+        draft[pothole._id] = {
+          _id: pothole._id,
           latitude: pothole.latitude,
           longitude: pothole.longitude,
           severity: pothole.severity,
           status: pothole.status,
-          depth_estimation: pothole.depth_estimation,
           segmentLabel: getSegmentLabel(pothole),
           description: `Lat ${pothole.latitude.toFixed(3)}, Lng ${pothole.longitude.toFixed(3)}`,
         };
@@ -201,7 +223,7 @@ const MapView = () => {
     });
   };
 
-  const removeSelection = (id: number) => {
+  const removeSelection = (id: string) => {
     setSelectedMap((prev) => {
       const draft = { ...prev };
       delete draft[id];
@@ -236,17 +258,15 @@ const MapView = () => {
     toast('Selection mode cancelled');
   };
 
+  const handleLocationChange = useCallback((lat: number, lng: number, zoom: number) => {
+    setMapLocation({ lat, lng, zoom });
+  }, []);
+
   return (
     <div className="space-y-4">
       <div className="bg-white shadow rounded-lg p-4">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <h1 className="text-2xl font-bold text-gray-900">Map View</h1>
-
-          {USE_FAKE_DATA && (
-            <div className="px-3 py-1 bg-yellow-100 text-yellow-800 rounded-md text-sm font-medium">
-              🧪 Using Fake Test Data
-            </div>
-          )}
 
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2">
@@ -311,7 +331,7 @@ const MapView = () => {
 
       {/* ALWAYS render map - even with empty data */}
       <div className="bg-white shadow rounded-lg overflow-hidden relative" style={{ height: '600px' }}>
-        {isLoading && !USE_FAKE_DATA ? (
+        {isLoading ? (
           <div className="flex items-center justify-center h-full">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
           </div>
@@ -348,21 +368,29 @@ const MapView = () => {
               zoom={13}
               style={{ height: '100%', width: '100%' }}
               scrollWheelZoom={true}
+              key={`map-${mapType}`} // Force remount on map type change
             >
-              {mapType === 'osm' ? osmTileLayer : satelliteTileLayer}
+              {mapType === 'osm' ? (
+                <>
+                  {osmTileLayer}
+                  {osmFallbackLayer}
+                </>
+              ) : (
+                satelliteTileLayer
+              )}
               {majorRoadsLayer}
 
               {/* Track map location */}
-              <MapLocationTracker onLocationChange={(lat, lng, zoom) => setMapLocation({ lat, lng, zoom })} />
+              <MapLocationTracker onLocationChange={handleLocationChange} />
               <SelectionFocusController focus={focusPoint} />
 
               {/* Safe marker rendering - only valid potholes are rendered */}
-              {validPotholes.map((pothole) => (
+            {validPotholes.map((pothole) => (
                 <PotholeMarker
-                  key={pothole.id}
+                  key={pothole._id}
                   pothole={pothole}
                   selectionMode={selectionMode}
-                  isSelected={Boolean(selectedMap[pothole.id])}
+                  isSelected={Boolean(selectedMap[pothole._id])}
                   onToggleSelect={toggleSelection}
                 />
               ))}
@@ -388,14 +416,14 @@ const MapView = () => {
                 </p>
                 <ul className="mt-2 max-h-40 space-y-1 overflow-y-auto text-xs text-ink-600">
                   {selectedList.map((item) => (
-                    <li key={item.id} className="flex items-center justify-between gap-2">
+                    <li key={item._id} className="flex items-center justify-between gap-2">
                       <span className="line-clamp-2">
-                        #{item.id} • {item.segmentLabel || item.description}
+                        #{item._id.slice(-6)} • {item.segmentLabel || item.description}
                       </span>
                       <button
                         type="button"
                         className="text-primary-600"
-                        onClick={() => removeSelection(item.id)}
+                        onClick={() => removeSelection(item._id)}
                       >
                         ✕
                       </button>
@@ -413,11 +441,9 @@ const MapView = () => {
                   No potholes detected yet
                 </p>
                 <p className="text-gray-600 text-sm">
-                  {USE_FAKE_DATA
-                    ? 'Toggle USE_FAKE_DATA to false to connect to backend.'
-                    : error
-                    ? 'Backend server is not available. Enable USE_FAKE_DATA to see test data.'
-                    : 'Upload a video to detect and view potholes on the map.'}
+              {error
+                ? 'Backend server is not available. Please start the Node backend on port 5000.'
+                : 'Upload a video to detect and view potholes on the map.'}
                 </p>
               </div>
             )}

@@ -123,14 +123,13 @@ const GovernmentManagementPanel = () => {
       notes: notes.trim() || undefined,
       summary: selection.summary,
       potholes: selection.items.map((item) => ({
-        potholeId: item.id,
+        potholeId: item._id,
         latitude: item.latitude,
         longitude: item.longitude,
         severity: item.severity,
         status: item.status,
         segmentLabel: item.segmentLabel,
         description: item.description,
-        depth_estimation: item.depth_estimation,
       })),
     });
   };

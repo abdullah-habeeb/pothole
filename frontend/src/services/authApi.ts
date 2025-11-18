@@ -28,17 +28,17 @@ export interface AuthResponse {
 
 export const authApi = {
   signup: async (data: SignupData): Promise<AuthResponse> => {
-    const response = await apiClient.post<AuthResponse>('/api/auth/signup', data);
+    const response = await apiClient.post<AuthResponse>('/auth/signup', data);
     return response.data;
   },
 
   login: async (data: LoginData): Promise<AuthResponse> => {
-    const response = await apiClient.post<AuthResponse>('/api/auth/login', data);
+    const response = await apiClient.post<AuthResponse>('/auth/login', data);
     return response.data;
   },
 
   getMe: async (): Promise<AuthResponse> => {
-    const response = await apiClient.get<AuthResponse>('/api/auth/me');
+    const response = await apiClient.get<AuthResponse>('/auth/me');
     return response.data;
   },
 
@@ -47,12 +47,12 @@ export const authApi = {
   },
 
   adminAuthorize: async (passkey: string): Promise<AuthResponse> => {
-    const response = await apiClient.post<AuthResponse>('/api/auth/admin-authorize', { passkey });
+    const response = await apiClient.post<AuthResponse>('/auth/admin-authorize', { passkey });
     return response.data;
   },
 
   governmentAuthorize: async (username: string, password: string): Promise<AuthResponse> => {
-    const response = await apiClient.post<AuthResponse>('/api/auth/government-authorize', { username, password });
+    const response = await apiClient.post<AuthResponse>('/auth/government-authorize', { username, password });
     return response.data;
   },
 };

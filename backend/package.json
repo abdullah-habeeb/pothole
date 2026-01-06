@@ -1,0 +1,25 @@
+{
+  "name": "pothole-detection-backend",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Backend server for pothole detection platform",
+  "main": "index.js",
+  "scripts": {
+    "dev": "node --watch index.js",
+    "start": "node index.js",
+    "test-connection": "node test-connection.js",
+    "create-env": "node create-env.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
+    "express": "^4.18.2",
+    "jsonwebtoken": "^9.0.2",
+    "mongodb": "^7.0.0",
+    "mongoose": "^8.19.4"
+  }
+}
